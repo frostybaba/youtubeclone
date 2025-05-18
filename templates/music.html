@@ -1,0 +1,460 @@
+{% extends "base.html" %}
+
+{% block title %}Music - NeonTube TR{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="section-header">
+        <h1><i class="fas fa-music"></i> NeonTube Music</h1>
+        <p class="section-description">Keşfet ve dinle</p>
+    </div>
+
+    <div class="music-grid" id="music-grid">
+        <!-- Müzik kartları buraya JavaScript ile eklenecek -->
+        <div id="loading-music" class="loading-message">
+            <div class="spinner"></div>
+            <p>Müzik yükleniyor...</p>
+        </div>
+
+        <div id="no-music" class="empty-container" style="display: none; width: 100%;">
+            <div class="empty-icon"><i class="fas fa-music-slash"></i></div>
+            <h3 class="empty-message">Şarkı Bulunamadı</h3>
+            <p class="empty-details">Şu anda müzik verisi bulunamadı</p>
+        </div>
+    </div>
+</div>
+
+<div id="music-player-container" class="music-player-container" style="display: none;">
+    <div class="music-player-wrapper">
+        <div class="music-player-art">
+            <img id="music-cover" src="" alt="Music Cover">
+            <div id="music-buffering" class="buffering" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 2;">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <div class="music-player-details">
+            <h3 id="music-title" class="music-title">Şarkı Adı</h3>
+            <p id="music-artist" class="music-artist">Sanatçı</p>
+
+            <div class="music-player-controls">
+                <div id="music-progress-container" class="progress-container">
+                    <div id="music-progress-bar" class="progress-bar"></div>
+                </div>
+
+                <div class="music-control-buttons">
+                    <div class="music-time">
+                        <span id="music-current-time">0:00</span> / <span id="music-duration">0:00</span>
+                    </div>
+
+                    <div class="music-buttons">
+                        <button id="music-prev-btn" class="control-btn" title="Önceki">
+                            <i class="fas fa-step-backward"></i>
+                        </button>
+                        <button id="music-play-pause-btn" class="control-btn" title="Oynat/Duraklat">
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button id="music-next-btn" class="control-btn" title="Sonraki">
+                            <i class="fas fa-step-forward"></i>
+                        </button>
+                        <button id="music-loop-btn" class="control-btn" title="Tekrarla">
+                            <i class="fas fa-redo"></i>
+                        </button>
+                        <button id="music-shuffle-btn" class="control-btn" title="Karıştır">
+                            <i class="fas fa-random"></i>
+                        </button>
+                    </div>
+
+                    <div class="music-volume-container">
+                        <button id="music-mute-btn" class="control-btn" title="Sustur">
+                            <i class="fas fa-volume-up"></i>
+                        </button>
+                        <input id="music-volume-slider" class="volume-slider" type="range" min="0" max="100" value="100">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button id="music-close-btn" class="music-close-btn">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ANON_MUSIC_API = 'https://anonmusic.glitch.me';
+    let musicList = [];
+    let currentMusicIndex = -1;
+    let audioPlayer = new Audio();
+    let isLooping = false;
+    let isShuffling = false;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Şarkı listesini yükle
+        loadMusicList();
+
+        // Oynatıcı kontrollerini ayarla
+        setupMusicPlayerControls();
+    });
+
+    function loadMusicList() {
+        const loadingElem = document.getElementById('loading-music');
+        const noMusicElem = document.getElementById('no-music');
+        const musicGrid = document.getElementById('music-grid');
+
+        loadingElem.style.display = 'flex';
+        noMusicElem.style.display = 'none';
+
+        // Kendi arka uç API'mizi kullan, bu CORS sorununu çözer
+        fetch('/api/music')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API returned status code ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                loadingElem.style.display = 'none';
+
+                if (data && data.length > 0) {
+                    musicList = shuffleArray([...data]); // Karıştırılmış bir kopya oluştur
+                    renderMusicCards(musicList);
+                } else {
+                    noMusicElem.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading music:', error);
+                loadingElem.style.display = 'none';
+                noMusicElem.style.display = 'block';
+                noMusicElem.querySelector('.empty-details').textContent = 
+                    'Müzik listesi yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.';
+            });
+    }
+
+    function renderMusicCards(musicItems) {
+        const musicGrid = document.getElementById('music-grid');
+
+        // Yükleme ve "bulunamadı" elementlerini koruyarak diğer kartları temizle
+        Array.from(musicGrid.children).forEach(child => {
+            if (!child.id.includes('loading') && !child.id.includes('no-music')) {
+                child.remove();
+            }
+        });
+
+        musicItems.forEach((music, index) => {
+            const musicCard = document.createElement('div');
+            musicCard.className = 'music-card animate-fade-in';
+            musicCard.dataset.musicIndex = index;
+
+            // Kapak resmi URL'sini oluştur
+            const coverImageUrl = `https://anonmusic.glitch.me${music.imagePath}`;
+
+            musicCard.innerHTML = `
+                <div class="music-thumbnail">
+                    <img src="${coverImageUrl}" alt="${music.name}" loading="lazy">
+                    <div class="music-play-button">
+                        <i class="fas fa-play"></i>
+                    </div>
+                </div>
+                <div class="music-info">
+                    <h3 class="music-title">${music.name}</h3>
+                    <div class="music-artist-name">${music.artist}</div>
+                    <div class="music-stats">
+                        <div class="music-plays">
+                            <i class="fas fa-play-circle"></i> ${formatPlays(music.plays)}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            musicCard.addEventListener('click', (e) => {
+                if (!e.target.closest('.music-play-button')) {
+                    window.location.href = `/music/${music.id}`;
+                } else {
+                    playMusic(index);
+                }
+            });
+
+            musicGrid.appendChild(musicCard);
+        });
+    }
+
+    function playMusic(index) {
+        if (index < 0 || index >= musicList.length) return;
+
+        // Aktif şarkı için görsel geri bildirim
+        document.querySelectorAll('.music-card').forEach(card => {
+            card.classList.remove('active');
+        });
+
+        const musicCard = document.querySelector(`.music-card[data-music-index="${index}"]`);
+        if (musicCard) {
+            musicCard.classList.add('active');
+            musicCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        currentMusicIndex = index;
+        const music = musicList[index];
+
+        // Oynatıcı konteynerini görünür yap
+        const playerContainer = document.getElementById('music-player-container');
+        playerContainer.style.display = 'block';
+
+        // Oynatıcı detaylarını güncelle
+        document.getElementById('music-title').textContent = music.name;
+        document.getElementById('music-artist').textContent = music.artist;
+
+        // AnonMusic API'den kapak resmini al
+        const coverUrl = `https://anonmusic.glitch.me${music.imagePath}`;
+        document.getElementById('music-cover').src = coverUrl;
+
+        // Yükleniyor göstergesini göster
+        document.getElementById('music-buffering').style.display = 'flex';
+
+        // Ses dosyasını ayarla - Tam URL'yi oluştur
+        const wasPlaying = !audioPlayer.paused;
+        const audioUrl = `https://anonmusic.glitch.me${music.audioPath}`;
+        audioPlayer.src = audioUrl;
+
+        console.log('Playing audio from:', audioUrl);
+        console.log('Showing cover from:', coverUrl);
+
+        // Ses dosyasını yükle ve oynat
+        audioPlayer.load();
+        audioPlayer.play().then(() => {
+            // Başarılı başlatma
+            document.getElementById('music-play-pause-btn').innerHTML = '<i class="fas fa-pause"></i>';
+        }).catch(err => {
+            console.error('Ses çalınırken hata oluştu:', err);
+            document.getElementById('music-play-pause-btn').innerHTML = '<i class="fas fa-play"></i>';
+            showNotification('Ses dosyası oynatılamadı');
+        });
+    }
+
+    function setupMusicPlayerControls() {
+        // Ses olaylarını dinle
+        audioPlayer.addEventListener('loadedmetadata', updateMusicDuration);
+        audioPlayer.addEventListener('timeupdate', updateMusicProgress);
+        audioPlayer.addEventListener('ended', onMusicEnded);
+        audioPlayer.addEventListener('canplay', () => {
+            document.getElementById('music-buffering').style.display = 'none';
+        });
+        audioPlayer.addEventListener('waiting', () => {
+            document.getElementById('music-buffering').style.display = 'flex';
+        });
+
+        // Oynat/Duraklat butonu
+        document.getElementById('music-play-pause-btn').addEventListener('click', toggleMusicPlayPause);
+
+        // İleri/Geri butonları
+        document.getElementById('music-prev-btn').addEventListener('click', playPreviousMusic);
+        document.getElementById('music-next-btn').addEventListener('click', playNextMusic);
+
+        // Tekrarla butonu
+        document.getElementById('music-loop-btn').addEventListener('click', toggleMusicLoop);
+
+        // Karıştır butonu
+        document.getElementById('music-shuffle-btn').addEventListener('click', toggleMusicShuffle);
+
+        // Ses kontrolü
+        document.getElementById('music-mute-btn').addEventListener('click', toggleMusicMute);
+        document.getElementById('music-volume-slider').addEventListener('input', changeMusicVolume);
+
+        // İlerleme çubuğu
+        document.getElementById('music-progress-container').addEventListener('click', seekMusic);
+
+        // Kapat butonu
+        document.getElementById('music-close-btn').addEventListener('click', closeMusicPlayer);
+    }
+
+    function updateMusicDuration() {
+        document.getElementById('music-duration').textContent = formatTime(audioPlayer.duration);
+    }
+
+    function updateMusicProgress() {
+        const percent = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+        document.getElementById('music-progress-bar').style.width = `${percent}%`;
+        document.getElementById('music-current-time').textContent = formatTime(audioPlayer.currentTime);
+    }
+
+    function toggleMusicPlayPause() {
+        if (audioPlayer.paused) {
+            audioPlayer.play().catch(err => console.error('Ses çalınırken hata oluştu:', err));
+            document.getElementById('music-play-pause-btn').innerHTML = '<i class="fas fa-pause"></i>';
+        } else {
+            audioPlayer.pause();
+            document.getElementById('music-play-pause-btn').innerHTML = '<i class="fas fa-play"></i>';
+        }
+    }
+
+    function playPreviousMusic() {
+        if (musicList.length === 0) return;
+
+        let newIndex = currentMusicIndex - 1;
+        if (newIndex < 0) {
+            newIndex = musicList.length - 1; // Listenin sonuna git
+        }
+
+        playMusic(newIndex);
+    }
+
+    function playNextMusic() {
+        if (musicList.length === 0) return;
+
+        let newIndex;
+
+        if (isShuffling) {
+            // Rastgele bir şarkı seç, ancak mevcut şarkıyı tekrarlama
+            let randomIndex;
+            do {
+                randomIndex = Math.floor(Math.random() * musicList.length);
+            } while (randomIndex === currentMusicIndex && musicList.length > 1);
+
+            newIndex = randomIndex;
+        } else {
+            // Sıradaki şarkıya git veya başa dön
+            newIndex = (currentMusicIndex + 1) % musicList.length;
+        }
+
+        playMusic(newIndex);
+    }
+
+    function onMusicEnded() {
+        if (isLooping) {
+            // Aynı şarkıyı tekrar oynat
+            audioPlayer.currentTime = 0;
+            audioPlayer.play().catch(err => console.error('Şarkı tekrarlanırken hata oluştu:', err));
+        } else {
+            // Bir sonraki şarkıya geç
+            playNextMusic();
+        }
+    }
+
+    function toggleMusicLoop() {
+        isLooping = !isLooping;
+        const loopBtn = document.getElementById('music-loop-btn');
+
+        if (isLooping) {
+            loopBtn.classList.add('active');
+            loopBtn.innerHTML = '<i class="fas fa-redo" style="color: var(--accent);"></i>';
+            if (audioPlayer) {
+                audioPlayer.loop = true;
+            }
+        } else {
+            loopBtn.classList.remove('active');
+            loopBtn.innerHTML = '<i class="fas fa-redo"></i>';
+            if (audioPlayer) {
+                audioPlayer.loop = false;
+            }
+        }
+    }
+
+    function toggleMusicShuffle() {
+        isShuffling = !isShuffling;
+        const shuffleBtn = document.getElementById('music-shuffle-btn');
+
+        if (isShuffling) {
+            shuffleBtn.classList.add('active');
+            shuffleBtn.innerHTML = '<i class="fas fa-random" style="color: var(--accent);"></i>';
+            musicList = shuffleArray([...musicList]);
+            currentMusicIndex = -1; // Reset current index
+            playNextMusic();
+        } else {
+            shuffleBtn.classList.remove('active');
+            shuffleBtn.innerHTML = '<i class="fas fa-random"></i>';
+            loadMusicList(); // Reset to original order
+        }
+    }
+
+    function toggleMusicMute() {
+        audioPlayer.muted = !audioPlayer.muted;
+
+        const muteBtn = document.getElementById('music-mute-btn');
+        const volumeSlider = document.getElementById('music-volume-slider');
+
+        muteBtn.innerHTML = audioPlayer.muted ? 
+            '<i class="fas fa-volume-mute"></i>' : 
+            '<i class="fas fa-volume-up"></i>';
+
+        volumeSlider.value = audioPlayer.muted ? 0 : audioPlayer.volume * 100;
+    }
+
+    function changeMusicVolume() {
+        const volumeLevel = document.getElementById('music-volume-slider').value / 100;
+
+        audioPlayer.volume = volumeLevel;
+        audioPlayer.muted = (volumeLevel === 0);
+
+        document.getElementById('music-mute-btn').innerHTML = (volumeLevel === 0) ? 
+            '<i class="fas fa-volume-mute"></i>' : 
+            '<i class="fas fa-volume-up"></i>';
+    }
+
+    function seekMusic(e) {
+        const rect = document.getElementById('music-progress-container').getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        const newTime = pos * audioPlayer.duration;
+
+        audioPlayer.currentTime = newTime;
+    }
+
+    function closeMusicPlayer() {
+        document.getElementById('music-player-container').style.display = 'none';
+        audioPlayer.pause();
+        document.getElementById('music-play-pause-btn').innerHTML = '<i class="fas fa-play"></i>';
+    }
+
+    // Yardımcı fonksiyonlar
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+    }
+
+    function formatPlays(plays) {
+        if (plays >= 1000000) {
+            return (plays / 1000000).toFixed(1) + 'M';
+        } else if (plays >= 1000) {
+            return (plays / 1000).toFixed(1) + 'K';
+        }
+        return plays.toString();
+    }
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    function showNotification(message) {
+        // Bildirim elementi oluştur
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-info-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+
+        // Animasyon ile göster
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+
+        // Belirli bir süre sonra kaldır
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+</script>
+{% endblock %}

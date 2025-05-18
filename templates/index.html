@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}NeonTube - Discover{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Subscriptions Section -->
+    <div class="subscriptions-container">
+        <div class="subscriptions-header">
+            <h2 class="subscriptions-title"><i class="fas fa-star"></i> Your Subscriptions</h2>
+            <div class="subscription-add">
+                <input type="text" id="subscription-input" class="subscription-input" placeholder="Add a channel..." autocomplete="off">
+                <button id="subscription-add-btn" class="subscription-add-btn" title="Add subscription">
+                    <i class="fas fa-plus-circle"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div id="subscriptions-list" class="subscriptions-list">
+            <!-- Subscriptions will be loaded from cookies -->
+            <div class="no-subscriptions" id="no-subscriptions">
+                You haven't subscribed to any channels yet. Add your favorites to see their latest videos!
+            </div>
+        </div>
+    </div>
+    
+    <h2><i class="fas fa-fire"></i> Discover Videos</h2>
+    
+    {% if videos %}
+    <div class="video-grid animate-fade-in">
+        {% for video in videos %}
+        <div class="video-card" data-video-id="{{ video.id }}">
+            <div class="video-thumbnail">
+                <img src="{{ video.thumbnail }}" alt="{{ video.title }}" loading="lazy">
+                {% if video.duration %}
+                <div class="video-duration">{{ video.duration }}</div>
+                {% endif %}
+            </div>
+            <div class="video-info">
+                <h3 class="video-title">{{ video.title }}</h3>
+                <div class="video-channel"><a href="/channel/{{ video.channel_id }}">{{ video.channel }}</a></div>
+                <div class="video-stats">
+                    <div class="video-views">
+                        <i class="fas fa-eye"></i> {{ video.view_count|default('...') }}
+                    </div>
+                    <div class="video-date">
+                        <i class="fas fa-calendar-alt"></i> {{ video.published_at|default('...') }}
+                    </div>
+                </div>
+                <button class="subscribe-btn" data-channel="{{ video.channel }}" data-channel-id="{{ video.channel_id }}">
+                    <i class="fas fa-plus"></i> Subscribe
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        {% if error %}
+        <div class="error-container">
+            <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+            <h3 class="error-message">Failed to Load Content</h3>
+            <p class="error-details">{{ error }}</p>
+            <button class="btn btn-accent" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt btn-icon"></i> Retry
+            </button>
+        </div>
+        {% else %}
+        <div class="empty-container">
+            <div class="empty-icon"><i class="fas fa-video-slash"></i></div>
+            <h3 class="empty-message">No Videos Available</h3>
+            <p class="empty-details">Try searching for something specific or check your internet connection</p>
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt btn-icon"></i> Refresh
+            </button>
+        </div>
+        {% endif %}
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSubscriptions();
+        setupSubscriptionEvents();
+    });
+    
+    function loadSubscriptions() {
+        const subscriptions = getSubscriptionsFromCookies();
+        const subscriptionsList = document.getElementById('subscriptions-list');
+        const noSubscriptions = document.getElementById('no-subscriptions');
+        
+        if (subscriptions.length > 0) {
+            noSubscriptions.style.display = 'none';
+            
+            subscriptions.forEach(subscription => {
+                addSubscriptionItem(subscription);
+            });
+        } else {
+            noSubscriptions.style.display = 'block';
+        }
+        
+        // Update subscribe buttons state
+        document.querySelectorAll('.subscribe-btn').forEach(btn => {
+            const channelId = btn.getAttribute('data-channel-id');
+            if (isChannelSubscribed(channelId)) {
+                btn.classList.add('subscribed');
+                btn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+            }
+        });
+    }
+    
+    function setupSubscriptionEvents() {
+        // Add subscription from input
+        const addBtn = document.getElementById('subscription-add-btn');
+        const input = document.getElementById('subscription-input');
+        
+        if (addBtn && input) {
+            addBtn.addEventListener('click', () => {
+                const channelName = input.value.trim();
+                if (channelName) {
+                    // For manual inputs, we use the name as the ID too since we don't have the actual YouTube ID
+                    addSubscription(channelName, channelName);
+                    input.value = '';
+                    
+                    // Show notification
+                    showNotification(`Added ${channelName} to your subscriptions`);
+                }
+            });
+            
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const channelName = input.value.trim();
+                    if (channelName) {
+                        // For manual inputs, we use the name as the ID too
+                        addSubscription(channelName, channelName);
+                        input.value = '';
+                        
+                        // Show notification
+                        showNotification(`Added ${channelName} to your subscriptions`);
+                    }
+                    e.preventDefault();
+                }
+            });
+        }
+        
+        // Add subscription from video card
+        document.querySelectorAll('.subscribe-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent video card click
+                const channelId = btn.getAttribute('data-channel-id');
+                const channelName = btn.getAttribute('data-channel');
+                
+                if (btn.classList.contains('subscribed')) {
+                    removeSubscription(channelId);
+                    btn.classList.remove('subscribed');
+                    btn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+                    
+                    // Show notification
+                    showNotification(`Removed ${channelName} from your subscriptions`);
+                } else {
+                    addSubscription(channelId, channelName);
+                    btn.classList.add('subscribed');
+                    btn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+                    
+                    // Show notification
+                    showNotification(`Subscribed to ${channelName}`);
+                }
+            });
+        });
+    }
+    
+    function addSubscriptionItem(subscription) {
+        const subscriptionsList = document.getElementById('subscriptions-list');
+        const item = document.createElement('div');
+        item.className = 'subscription-item';
+        item.innerHTML = `
+            <span class="subscription-channel">${subscription.name || subscription}</span>
+            <button class="subscription-remove" data-channel-id="${subscription.id || subscription}" title="Remove subscription">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        // Add remove event
+        const removeBtn = item.querySelector('.subscription-remove');
+        const channelId = subscription.id || subscription;
+        const channelName = subscription.name || subscription;
+        
+        removeBtn.addEventListener('click', () => {
+            removeSubscription(channelId);
+            item.remove();
+            
+            if (subscriptionsList.children.length <= 1) {
+                document.getElementById('no-subscriptions').style.display = 'block';
+            }
+            
+            // Update subscribe buttons
+            document.querySelectorAll('.subscribe-btn').forEach(btn => {
+                if (btn.getAttribute('data-channel-id') === channelId) {
+                    btn.classList.remove('subscribed');
+                    btn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+                }
+            });
+        });
+        
+        subscriptionsList.appendChild(item);
+    }
+    
+    function addSubscription(channelId, channelName) {
+        const subscriptions = getSubscriptionsFromCookies();
+        
+        // Check if already subscribed 
+        if (!isChannelSubscribed(channelId)) {
+            const newSubscription = {
+                id: channelId,
+                name: channelName,
+                added: new Date().toISOString()
+            };
+            
+            subscriptions.push(newSubscription);
+            setSubscriptionsCookie(subscriptions);
+            addSubscriptionItem(newSubscription);
+            document.getElementById('no-subscriptions').style.display = 'none';
+        }
+    }
+    
+    function removeSubscription(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        const updatedSubscriptions = subscriptions.filter(sub => {
+            if (typeof sub === 'object') {
+                return sub.id !== channelId;
+            } else {
+                return sub !== channelId; // For backward compatibility
+            }
+        });
+        
+        setSubscriptionsCookie(updatedSubscriptions);
+    }
+    
+    function isChannelSubscribed(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        return subscriptions.some(sub => {
+            if (typeof sub === 'object') {
+                return sub.id === channelId;
+            } else {
+                return sub === channelId; // For backward compatibility
+            }
+        });
+    }
+    
+    function showNotification(message) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+
+    function getSubscriptionsFromCookies() {
+        const cookieValue = getCookie('subscriptions');
+        return cookieValue ? JSON.parse(cookieValue) : [];
+    }
+    
+    function setSubscriptionsCookie(subscriptions) {
+        setCookie('subscriptions', JSON.stringify(subscriptions), 365);
+    }
+    
+    function setCookie(name, value, days) {
+        let expires = '';
+        if (days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = '; expires=' + date.toUTCString();
+        }
+        document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/';
+    }
+    
+    function getCookie(name) {
+        const nameEQ = name + '=';
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+        }
+        return null;
+    }
+</script>
+{% endblock %}

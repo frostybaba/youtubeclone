@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+
+{% block title %}{% if video %}{{ video.title }}{% else %}Video Player{% endif %} - NeonTube{% endblock %}
+
+{% block extra_head %}
+<!-- Meta tags for video content -->
+{% if video %}
+<meta property="og:title" content="{{ video.title }}">
+<meta property="og:description" content="{{ video.description|truncate(150) }}">
+<meta property="og:image" content="{{ video.thumbnail }}">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="player-container">
+    {% if video %}
+    <div class="video-player-wrapper">
+        <video id="video-player" class="video-player" poster="{{ video.thumbnail }}" preload="auto"></video>
+
+        <!-- Buffering indicator -->
+        <div id="buffering" class="buffering" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 2;">
+            <div class="spinner"></div>
+        </div>
+
+        <!-- Custom controls overlay -->
+        <div id="custom-controls" class="custom-player-controls">
+            <button id="play-pause-btn" class="control-btn" title="Play/Pause">
+                <i class="fas fa-play"></i>
+            </button>
+
+            <div id="current-time" class="time">0:00</div>
+
+            <div id="progress-container" class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+
+            <div id="duration" class="time">0:00</div>
+
+            <div class="volume-container">
+                <button id="mute-btn" class="control-btn" title="Mute">
+                    <i class="fas fa-volume-up"></i>
+                </button>
+                <input id="volume-slider" class="volume-slider" type="range" min="0" max="100" value="100">
+            </div>
+
+            <div class="quality-selector">
+                <button id="quality-btn" class="quality-btn" title="Quality">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <div class="quality-options">
+                    <div class="quality-option" data-quality="best">Best Quality (Experimental)</div>
+                    <div class="quality-option" data-quality="720">720p</div>
+                    <div class="quality-option" data-quality="480">480p</div>
+                    <div class="quality-option" data-quality="360">360p</div>
+                </div>
+            </div>
+
+            <button id="loop-btn" class="control-btn" title="Loop">
+                <i class="fas fa-redo"></i>
+            </button>
+            <button id="fullscreen-btn" class="control-btn" title="Fullscreen">
+                <i class="fas fa-expand"></i>
+            </button>
+            <div class="share-download-container">
+                <button id="share-btn" class="control-btn" title="Share">
+                    <i class="fas fa-share"></i>
+                </button>
+                <button id="download-btn" class="control-btn" title="Download">
+                    <i class="fas fa-download"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="video-details animate-fade-in">
+        <h1 class="video-title-large">{{ video.title }}</h1>
+
+        <div class="video-meta">
+            <div class="video-meta-left">
+                <span class="view-count"><i class="fas fa-eye"></i> {{ video.view_count|default('0') }} views</span>
+                <span class="upload-date"><i class="fas fa-calendar-alt"></i> {{ video.published_at }}</span>
+            </div>
+            <div class="video-meta-right">
+                <span class="channel-name">{{ video.channel }}</span>
+                <button id="channel-subscribe-btn" class="channel-subscribe-btn" data-channel="{{ video.channel }}" data-channel-id="{{ video.channel_id }}">
+                    <i class="fas fa-plus"></i> Subscribe
+                </button>
+            </div>
+        </div>
+
+        <div class="video-description">{{ video.description }}</div>
+    </div>
+
+    <div class="related-videos-container">
+        <h2><i class="fas fa-fire"></i> More From This Channel</h2>
+        <div id="related-videos" class="video-grid animate-fade-in">
+            <!-- Related videos will be loaded here via JavaScript -->
+            <div id="loading-channel-videos" class="loading-message">Loading more videos from this channel...</div>
+            <div id="no-channel-videos" class="empty-container" style="display: none; width: 100%;">
+                <div class="empty-icon"><i class="fas fa-video-slash"></i></div>
+                <h3 class="empty-message">No Videos Available</h3>
+                <p class="empty-details">Could not load more videos from this channel</p>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="error-container">
+        <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+        <h3 class="error-message">Video Not Found</h3>
+        <p class="error-details">{{ error|default('The requested video could not be loaded') }}</p>
+        <a href="/" class="btn btn-accent">
+            <i class="fas fa-home btn-icon"></i> Back to Discover
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Video player script -->
+<script src="{{ url_for('static', filename='js/player.js') }}"></script>
+
+{% if video %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if the channel is already subscribed
+        updateSubscribeButton();
+
+        // Add subscription event listener
+        const subscribeBtn = document.getElementById('channel-subscribe-btn');
+        if (subscribeBtn) {
+            subscribeBtn.addEventListener('click', toggleSubscription);
+        }
+
+        // Load channel videos
+        loadChannelVideos();
+    });
+
+    function updateSubscribeButton() {
+        const subscribeBtn = document.getElementById('channel-subscribe-btn');
+        if (!subscribeBtn) return;
+
+        const channelId = subscribeBtn.getAttribute('data-channel-id');
+        const subscriptions = getSubscriptionsFromCookies();
+
+        if (isChannelSubscribed(channelId)) {
+            subscribeBtn.classList.add('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+        } else {
+            subscribeBtn.classList.remove('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+        }
+    }
+
+    function toggleSubscription() {
+        const subscribeBtn = document.getElementById('channel-subscribe-btn');
+        const channelId = subscribeBtn.getAttribute('data-channel-id');
+        const channelName = subscribeBtn.getAttribute('data-channel');
+
+        if (subscribeBtn.classList.contains('subscribed')) {
+            // Remove subscription
+            removeSubscription(channelId);
+            subscribeBtn.classList.remove('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+        } else {
+            // Add subscription
+            addSubscription(channelId, channelName);
+            subscribeBtn.classList.add('subscribed');
+            subscribeBtn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+
+            // Show brief notification
+            showNotification(`Subscribed to ${channelName}`);
+        }
+    }
+
+    function loadChannelVideos() {
+        const channelId = document.getElementById('channel-subscribe-btn').getAttribute('data-channel-id');
+        const relatedVideosContainer = document.getElementById('related-videos');
+        const loadingElem = document.getElementById('loading-channel-videos');
+        const noVideosElem = document.getElementById('no-channel-videos');
+
+        if (!channelId) {
+            loadingElem.style.display = 'none';
+            noVideosElem.style.display = 'block';
+            return;
+        }
+
+        // Clear existing videos except for loading and no-videos elements
+        Array.from(relatedVideosContainer.children).forEach(child => {
+            if (!child.id.includes('loading') && !child.id.includes('no-channel')) {
+                child.remove();
+            }
+        });
+
+        loadingElem.style.display = 'block';
+        noVideosElem.style.display = 'none';
+
+        // Fetch videos from the same channel
+        fetch(`/api/channel?id=${channelId}&max_results=8`)
+            .then(response => response.json())
+            .then(data => {
+                loadingElem.style.display = 'none';
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                if (data.videos && data.videos.length > 0) {
+                    // Filter out the current video
+                    const currentVideoId = new URLSearchParams(window.location.search).get('v');
+                    const filteredVideos = data.videos.filter(video => video.id !== currentVideoId);
+
+                    if (filteredVideos.length > 0) {
+                        renderVideos(filteredVideos, relatedVideosContainer);
+                    } else {
+                        noVideosElem.style.display = 'block';
+                    }
+                } else {
+                    noVideosElem.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading channel videos:', error);
+                loadingElem.style.display = 'none';
+                noVideosElem.style.display = 'block';
+                noVideosElem.querySelector('.empty-details').textContent = 
+                    'Failed to load channel videos. Please try again later.';
+            });
+    }
+
+    function renderVideos(videos, container) {
+        videos.forEach(video => {
+            const videoCard = document.createElement('div');
+            videoCard.className = 'video-card animate-fade-in';
+            videoCard.dataset.videoId = video.id;
+
+            videoCard.innerHTML = `
+                <div class="video-thumbnail">
+                    <img src="${video.thumbnail}" alt="${video.title}" loading="lazy">
+                    ${video.duration ? `<div class="video-duration">${video.duration}</div>` : ''}
+                </div>
+                <div class="video-info">
+                    <h3 class="video-title">${video.title}</h3>
+                    <div class="video-channel">${video.channel}</div>
+                    <div class="video-stats">
+                        <div class="video-views">
+                            <i class="fas fa-eye"></i> ${video.view_count || '...'}
+                        </div>
+                        <div class="video-date">
+                            <i class="fas fa-calendar-alt"></i> ${video.published_at || '...'}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            videoCard.addEventListener('click', () => {
+                window.location.href = `/watch?v=${video.id}`;
+            });
+
+            container.appendChild(videoCard);
+        });
+    }
+
+    function showNotification(message) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+
+        // Animate in
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+
+    function getSubscriptionsFromCookies() {
+        const cookieValue = getCookie('subscriptions');
+        return cookieValue ? JSON.parse(cookieValue) : [];
+    }
+
+    function isChannelSubscribed(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        return subscriptions.some(sub => sub.id === channelId);
+    }
+
+    function addSubscription(channelId, channelName) {
+        const subscriptions = getSubscriptionsFromCookies();
+
+        // Check if already subscribed
+        if (!subscriptions.some(sub => sub.id === channelId)) {
+            subscriptions.push({
+                id: channelId,
+                name: channelName,
+                added: new Date().toISOString()
+            });
+            setSubscriptionsCookie(subscriptions);
+        }
+    }
+
+    function removeSubscription(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        const updatedSubscriptions = subscriptions.filter(sub => sub.id !== channelId);
+        setSubscriptionsCookie(updatedSubscriptions);
+    }
+
+    function setSubscriptionsCookie(subscriptions) {
+        setCookie('subscriptions', JSON.stringify(subscriptions), 365);
+    }
+
+    function setCookie(name, value, days) {
+        let expires = '';
+        if (days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = '; expires=' + date.toUTCString();
+        }
+        document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/';
+    }
+
+    function getCookie(name) {
+        const nameEQ = name + '=';
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+        }
+        return null;
+    }
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,430 @@
+/* Music Detail Page Styles */
+.music-detail-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.music-detail-player {
+    display: flex;
+    background-color: var(--surface);
+    border-radius: var(--card-border-radius);
+    overflow: hidden;
+    margin-bottom: 30px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--primary-dark);
+    position: relative;
+}
+
+.music-detail-cover-container {
+    width: 300px;
+    height: 300px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.music-detail-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.music-detail-play-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.music-detail-play-overlay i {
+    font-size: 60px;
+    color: white;
+    opacity: 0.9;
+    transition: all 0.3s ease;
+}
+
+.music-detail-play-overlay:hover i {
+    transform: scale(1.1);
+    opacity: 1;
+    color: var(--accent);
+}
+
+.music-detail-buffering {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.music-detail-playing-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.music-wave {
+    display: flex;
+    align-items: flex-end;
+    height: 20px;
+    gap: 3px;
+}
+
+.wave-bar {
+    display: inline-block;
+    width: 4px;
+    height: 5px;
+    background-color: var(--accent);
+    border-radius: 1px;
+    animation: sound 0.5s infinite alternate;
+}
+
+.wave-bar:nth-child(2) {
+    animation-delay: 0.1s;
+    height: 10px;
+}
+
+.wave-bar:nth-child(3) {
+    animation-delay: 0.2s;
+    height: 15px;
+}
+
+.wave-bar:nth-child(4) {
+    animation-delay: 0.3s;
+    height: 10px;
+}
+
+.wave-bar:nth-child(5) {
+    animation-delay: 0.4s;
+    height: 5px;
+}
+
+@keyframes sound {
+    0% {
+        transform: scaleY(1);
+    }
+    100% {
+        transform: scaleY(1.5);
+    }
+}
+
+.music-detail-controls {
+    flex: 1;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.music-detail-info {
+    margin-bottom: 20px;
+}
+
+.music-detail-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.music-detail-artist {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.music-detail-plays {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.music-detail-plays i {
+    color: var(--accent);
+    margin-right: 5px;
+}
+
+.music-detail-progress-container {
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    position: relative;
+}
+
+.music-detail-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 0.1s linear;
+}
+
+.music-detail-time {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
+.music-detail-button-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.music-detail-control-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.music-detail-control-btn:hover {
+    color: var(--accent);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.music-detail-play-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 1.5rem;
+    background-color: var(--primary);
+    border-radius: 50%;
+}
+
+.music-detail-play-btn:hover {
+    background-color: var(--primary-light);
+    box-shadow: var(--neon-glow);
+}
+
+.music-detail-volume-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.music-detail-volume-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    outline: none;
+}
+
+.music-detail-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.music-detail-more h2 {
+    font-size: 1.5rem;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.music-detail-related {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.related-song-card {
+    background-color: var(--surface);
+    border-radius: var(--card-border-radius);
+    overflow: hidden;
+    transition: transform 0.3s ease;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}
+
+.related-song-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+}
+
+.related-song-cover {
+    position: relative;
+    width: 100%;
+    padding-top: 100%;
+}
+
+.related-song-cover img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.related-song-play {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.related-song-play i {
+    font-size: 30px;
+    color: white;
+}
+
+.related-song-card:hover .related-song-play {
+    opacity: 1;
+}
+
+.related-song-info {
+    padding: 12px;
+}
+
+.related-song-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.related-song-artist {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .music-detail-player {
+        flex-direction: column;
+    }
+    
+    .music-detail-cover-container {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+    }
+    
+    .music-detail-controls {
+        padding: 16px;
+    }
+    
+    .music-detail-title {
+        font-size: 1.4rem;
+    }
+    
+    .music-detail-artist {
+        font-size: 1rem;
+    }
+    
+    .music-detail-button-controls {
+        gap: 10px;
+    }
+    
+    .music-detail-control-btn {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    
+    .music-detail-play-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 1.3rem;
+    }
+    
+    .music-detail-related {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .music-detail-related {
+        grid-template-columns: 1fr;
+    }
+    
+    .music-detail-title {
+        font-size: 1.2rem;
+    }
+    
+    .music-detail-artist {
+        font-size: 0.9rem;
+    }
+}
+
+/* Notification styling */
+.notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100%);
+    background-color: var(--surface);
+    border-radius: 8px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 9999;
+    border-left: 4px solid var(--accent);
+    transition: transform 0.3s ease;
+}
+
+.notification.show {
+    transform: translateX(-50%) translateY(0);
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+}
+
+.notification-content i {
+    color: var(--accent);
+    margin-right: 10px;
+    font-size: 1.2rem;
+}
+
+.notification-content span {
+    color: var(--text-primary);
+}

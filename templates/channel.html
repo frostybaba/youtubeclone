@@ -1,0 +1,277 @@
+
+{% extends "base.html" %}
+
+{% block title %}{{ channel.name }} - Channel{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="channel-header">
+        <h1 class="channel-title">{{ channel.name }}</h1>
+        <div class="channel-stats" id="channel-stats">
+            <span><i class="fas fa-eye"></i> <span id="total-views">{{ channel.total_views }}</span> total views</span>
+            <span><i class="fas fa-video"></i> <span id="video-count">{{ channel.video_count }}</span> videos</span>
+            <span><i class="fas fa-chart-line"></i> <span id="avg-views">{{ channel.avg_views }}</span> average views per video</span>
+        </div>
+        <p class="channel-description">{{ channel.description }}</p>
+    </div>
+
+    <div class="video-sort-options">
+        <select id="sort-select" class="sort-select">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="popular">Most Popular</option>
+            <option value="least_popular">Least Popular</option>
+        </select>
+    </div>
+
+    <div id="channel-videos" class="video-grid animate-fade-in">
+        {% for video in videos %}
+        <div class="video-card" data-video-id="{{ video.id }}" data-views="{{ video.raw_view_count }}" data-date="{{ video.published_at }}">
+            <div class="video-thumbnail">
+                <a href="/watch?v={{ video.id }}">
+                    <img src="{{ video.thumbnail }}" alt="{{ video.title }}" loading="lazy">
+                    {% if video.duration %}
+                    <div class="video-duration">{{ video.duration }}</div>
+                    {% endif %}
+                </a>
+            </div>
+            <div class="video-info">
+                <h3 class="video-title"><a href="/watch?v={{ video.id }}">{{ video.title }}</a></h3>
+                <div class="video-stats">
+                    <div class="video-views">
+                        <i class="fas fa-eye"></i> {{ video.view_count }}
+                    </div>
+                    <div class="video-date">
+                        <i class="fas fa-calendar-alt"></i> {{ video.published_at }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div id="loading-spinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading more videos...</p>
+    </div>
+    
+    <div id="load-more-container" class="load-more-container">
+        <button id="load-more-btn" class="load-more-btn">Load More Videos</button>
+    </div>
+    
+    <div id="no-more-videos" class="no-more-videos" style="display: none;">
+        <p>No more videos to load</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sortSelect = document.getElementById('sort-select');
+    const videoGrid = document.getElementById('channel-videos');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const noMoreVideos = document.getElementById('no-more-videos');
+    const channelId = "{{ channel.id }}";
+    
+    let currentPage = 1;
+    let isLoading = false;
+    let allVideosLoaded = false;
+    let totalVideosLoaded = {{ videos|length }};
+    
+    // Video sorting function
+    function sortVideos() {
+        const videos = Array.from(videoGrid.getElementsByClassName('video-card'));
+        const sortBy = sortSelect.value;
+        
+        videos.sort((a, b) => {
+            if (sortBy === 'newest' || sortBy === 'oldest') {
+                const dateA = new Date(a.dataset.date);
+                const dateB = new Date(b.dataset.date);
+                return sortBy === 'newest' ? dateB - dateA : dateA - dateB;
+            } else {
+                const viewsA = parseInt(a.dataset.views || 0);
+                const viewsB = parseInt(b.dataset.views || 0);
+                return sortBy === 'popular' ? viewsB - viewsA : viewsA - viewsB;
+            }
+        });
+        
+        videos.forEach(video => videoGrid.appendChild(video));
+    }
+    
+    // Add event listener for sorting
+    sortSelect.addEventListener('change', sortVideos);
+    
+    // Create video card element
+    function createVideoCard(video) {
+        const videoCard = document.createElement('div');
+        videoCard.className = 'video-card animate-fade-in';
+        videoCard.dataset.videoId = video.id;
+        videoCard.dataset.views = video.raw_view_count || 0;
+        videoCard.dataset.date = video.published_at || '';
+        
+        const durationHtml = video.duration ? 
+            `<div class="video-duration">${video.duration}</div>` : '';
+        
+        videoCard.innerHTML = `
+            <div class="video-thumbnail">
+                <a href="/watch?v=${video.id}">
+                    <img src="${video.thumbnail}" alt="${video.title}" loading="lazy">
+                    ${durationHtml}
+                </a>
+            </div>
+            <div class="video-info">
+                <h3 class="video-title"><a href="/watch?v=${video.id}">${video.title}</a></h3>
+                <div class="video-stats">
+                    <div class="video-views">
+                        <i class="fas fa-eye"></i> ${video.view_count || 0}
+                    </div>
+                    <div class="video-date">
+                        <i class="fas fa-calendar-alt"></i> ${video.published_at || ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return videoCard;
+    }
+    
+    // Load more videos function
+    function loadMoreVideos() {
+        if (isLoading || allVideosLoaded) return;
+        
+        isLoading = true;
+        currentPage++;
+        loadingSpinner.style.display = 'flex';
+        loadMoreBtn.style.display = 'none';
+        
+        // Calculate videos to skip based on already loaded videos
+        const skip = totalVideosLoaded;
+        const maxResults = 10; // Load 10 videos at a time
+        
+        fetch(`/api/channel?id=${channelId}&max_results=${maxResults}&skip=${skip}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load more videos');
+                }
+                return response.json();
+            })
+            .then(data => {
+                loadingSpinner.style.display = 'none';
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                if (data.videos && data.videos.length > 0) {
+                    data.videos.forEach(video => {
+                        const videoCard = createVideoCard(video);
+                        videoGrid.appendChild(videoCard);
+                    });
+                    
+                    // Update total videos count
+                    totalVideosLoaded += data.videos.length;
+                    
+                    // Update channel stats if additional stats available
+                    if (data.channel_stats) {
+                        document.getElementById('total-views').textContent = data.channel_stats.total_views;
+                        document.getElementById('video-count').textContent = data.channel_stats.video_count;
+                        document.getElementById('avg-views').textContent = data.channel_stats.avg_views;
+                    }
+                    
+                    // Sort the videos after adding new ones
+                    sortVideos();
+                    
+                    // Show load more button if not all videos loaded
+                    if (data.videos.length < maxResults) {
+                        allVideosLoaded = true;
+                        noMoreVideos.style.display = 'block';
+                    } else {
+                        loadMoreBtn.style.display = 'block';
+                    }
+                } else {
+                    allVideosLoaded = true;
+                    noMoreVideos.style.display = 'block';
+                }
+                
+                isLoading = false;
+            })
+            .catch(error => {
+                console.error('Error loading more videos:', error);
+                loadingSpinner.style.display = 'none';
+                loadMoreBtn.style.display = 'block';
+                loadMoreBtn.textContent = 'Retry Loading More';
+                isLoading = false;
+            });
+    }
+    
+    // Add event listener for load more button
+    loadMoreBtn.addEventListener('click', loadMoreVideos);
+    
+    // Also load more videos when scrolling near the bottom
+    window.addEventListener('scroll', function() {
+        if (isLoading || allVideosLoaded) return;
+        
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+        const clientHeight = document.documentElement.clientHeight;
+        
+        // If we're near the bottom of the page, load more videos
+        if (scrollTop + clientHeight >= scrollHeight - 300) {
+            loadMoreVideos();
+        }
+    });
+});
+</script>
+
+<style>
+.loading-spinner {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(157, 78, 221, 0.3);
+    border-radius: 50%;
+    border-top-color: #9d4edd;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.load-more-btn {
+    background-color: #9d4edd;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.load-more-btn:hover {
+    background-color: #7b2cbf;
+}
+
+.no-more-videos {
+    text-align: center;
+    margin: 20px 0;
+    color: #999;
+}
+</style>
+{% endblock %}

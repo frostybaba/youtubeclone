@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+
+{% block title %}Your Subscriptions - NeonTube{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="subscriptions-container">
+        <div class="subscriptions-header">
+            <h2 class="subscriptions-title"><i class="fas fa-star"></i> Your Subscriptions</h2>
+            <div class="subscription-add">
+                <input type="text" id="subscription-input" class="subscription-input" placeholder="Add a channel..." autocomplete="off">
+                <button id="subscription-add-btn" class="subscription-add-btn" title="Add subscription">
+                    <i class="fas fa-plus-circle"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div id="subscriptions-list" class="subscriptions-list">
+            <!-- Subscriptions will be loaded from cookies -->
+            <div class="no-subscriptions" id="no-subscriptions">
+                You haven't subscribed to any channels yet. Add channels to see their latest videos here!
+            </div>
+        </div>
+    </div>
+    
+    <h2><i class="fas fa-video"></i> Latest Videos from Your Subscriptions</h2>
+    
+    <div id="subscription-videos" class="video-grid animate-fade-in">
+        <!-- Videos will be loaded dynamically -->
+        <div id="loading-subscription-videos" class="loading-message">
+            <div class="spinner"></div>
+            <p>Loading videos from your subscriptions...</p>
+        </div>
+        
+        <div id="no-subscription-videos" class="empty-container" style="display: none; width: 100%;">
+            <div class="empty-icon"><i class="fas fa-video-slash"></i></div>
+            <h3 class="empty-message">No Videos Available</h3>
+            <p class="empty-details">Subscribe to channels to see their videos here, or try adding some channels first</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSubscriptions();
+        setupSubscriptionEvents();
+        loadSubscriptionVideos();
+    });
+    
+    function loadSubscriptions() {
+        const subscriptions = getSubscriptionsFromCookies();
+        const subscriptionsList = document.getElementById('subscriptions-list');
+        const noSubscriptions = document.getElementById('no-subscriptions');
+        
+        if (subscriptions.length > 0) {
+            noSubscriptions.style.display = 'none';
+            
+            subscriptions.forEach(channel => {
+                addSubscriptionItem(channel);
+            });
+        } else {
+            noSubscriptions.style.display = 'block';
+        }
+    }
+    
+    function setupSubscriptionEvents() {
+        // Add subscription from input
+        const addBtn = document.getElementById('subscription-add-btn');
+        const input = document.getElementById('subscription-input');
+        
+        addBtn.addEventListener('click', () => {
+            const channel = input.value.trim();
+            if (channel) {
+                addSubscription(channel);
+                input.value = '';
+                loadSubscriptionVideos(); // Reload videos
+            }
+        });
+        
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const channel = input.value.trim();
+                if (channel) {
+                    addSubscription(channel);
+                    input.value = '';
+                    loadSubscriptionVideos(); // Reload videos
+                }
+                e.preventDefault();
+            }
+        });
+    }
+    
+    function addSubscriptionItem(channel) {
+        const subscriptionsList = document.getElementById('subscriptions-list');
+        const item = document.createElement('div');
+        item.className = 'subscription-item';
+        item.innerHTML = `
+            <span class="subscription-channel">${channel}</span>
+            <button class="subscription-remove" data-channel="${channel}" title="Remove subscription">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        // Add remove event
+        const removeBtn = item.querySelector('.subscription-remove');
+        removeBtn.addEventListener('click', () => {
+            removeSubscription(channel);
+            item.remove();
+            
+            if (subscriptionsList.children.length <= 1) {
+                document.getElementById('no-subscriptions').style.display = 'block';
+            }
+            
+            loadSubscriptionVideos(); // Reload videos after removing
+        });
+        
+        subscriptionsList.appendChild(item);
+    }
+    
+    function addSubscription(channel) {
+        const subscriptions = getSubscriptionsFromCookies();
+        
+        if (!subscriptions.includes(channel)) {
+            subscriptions.push(channel);
+            setSubscriptionsCookie(subscriptions);
+            addSubscriptionItem(channel);
+            document.getElementById('no-subscriptions').style.display = 'none';
+            
+            // Show notification
+            showNotification(`Added ${channel} to your subscriptions`);
+        }
+    }
+    
+    function removeSubscription(channel) {
+        const subscriptions = getSubscriptionsFromCookies();
+        const index = subscriptions.indexOf(channel);
+        
+        if (index !== -1) {
+            subscriptions.splice(index, 1);
+            setSubscriptionsCookie(subscriptions);
+            
+            // Show notification
+            showNotification(`Removed ${channel} from your subscriptions`);
+        }
+    }
+    
+    function loadSubscriptionVideos() {
+        const subscriptionVideos = document.getElementById('subscription-videos');
+        const loadingElem = document.getElementById('loading-subscription-videos');
+        const noVideosElem = document.getElementById('no-subscription-videos');
+        const subscriptions = getSubscriptionsFromCookies();
+        
+        // Clear existing videos except loading and no-videos elements
+        Array.from(subscriptionVideos.children).forEach(child => {
+            if (!child.id.includes('loading') && !child.id.includes('no-subscription')) {
+                child.remove();
+            }
+        });
+        
+        if (subscriptions.length === 0) {
+            loadingElem.style.display = 'none';
+            noVideosElem.style.display = 'block';
+            return;
+        }
+        
+        loadingElem.style.display = 'block';
+        noVideosElem.style.display = 'none';
+        
+        // Simulate loading subscription videos (in a real app, this would fetch from your backend)
+        setTimeout(() => {
+            loadingElem.style.display = 'none';
+            
+            // Check if we have any subscriptions
+            if (subscriptions.length === 0) {
+                noVideosElem.style.display = 'block';
+                return;
+            }
+            
+            // Fetch videos for each channel ID in subscriptions
+            let videoPromises = [];
+            
+            subscriptions.forEach(sub => {
+                const channelId = typeof sub === 'object' ? sub.id : sub;
+                // Add a promise for each channel's videos
+                videoPromises.push(
+                    fetch(`/api/channel?id=${encodeURIComponent(channelId)}&max_results=3`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        return data.videos || [];
+                    })
+                    .catch(error => {
+                        console.error(`Error loading videos for channel ${channelId}: ${error}`);
+                        return []; // Return empty array on error
+                    })
+                );
+            });
+            
+            // Get all videos from all subscribed channels
+            Promise.all(videoPromises)
+                .then(allChannelsVideos => {
+                    // Flatten the array of arrays into a single array of videos
+                    const allVideos = allChannelsVideos.flat();
+                    
+                    // Sort by date (newest first) - this assumes published_at is in YYYY-MM-DD format
+                    allVideos.sort((a, b) => {
+                        const dateA = a.published_at ? new Date(a.published_at) : new Date(0);
+                        const dateB = b.published_at ? new Date(b.published_at) : new Date(0);
+                        return dateB - dateA; // Newest first
+                    });
+                    
+                    if (allVideos.length > 0) {
+                        renderVideos(allVideos, subscriptionVideos);
+                    } else {
+                        noVideosElem.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading subscription videos:', error);
+                    noVideosElem.style.display = 'block';
+                    noVideosElem.querySelector('.empty-details').textContent = 
+                        'Failed to load videos from your subscriptions. Please try again later.';
+                });
+        }, 1500);
+    }
+    
+    function renderVideos(videos, container) {
+        videos.forEach(video => {
+            const videoCard = document.createElement('div');
+            videoCard.className = 'video-card animate-fade-in';
+            videoCard.dataset.videoId = video.id;
+            
+            videoCard.innerHTML = `
+                <div class="video-thumbnail">
+                    <img class="lazy-load" data-src="${video.thumbnail}" alt="${video.title}" loading="lazy">
+                    ${video.duration ? `<div class="video-duration">${video.duration}</div>` : ''}
+                </div>
+                <div class="video-info">
+                    <h3 class="video-title">${video.title}</h3>
+                    <div class="video-channel">${video.channel}</div>
+                    <div class="video-stats">
+                        <div class="video-views">
+                            <i class="fas fa-eye"></i> ${video.view_count || '...'}
+                        </div>
+                        <div class="video-date">
+                            <i class="fas fa-calendar-alt"></i> ${video.published_at || '...'}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            videoCard.addEventListener('click', () => {
+                window.location.href = `/watch?v=${video.id}`;
+            });
+            
+            container.appendChild(videoCard);
+        });
+        
+        // Initialize lazy loading for new images
+        initLazyLoading();
+    }
+    
+    function showNotification(message) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+    
+    function getSubscriptionsFromCookies() {
+        const cookieValue = getCookie('subscriptions');
+        return cookieValue ? JSON.parse(cookieValue) : [];
+    }
+    
+    function setSubscriptionsCookie(subscriptions) {
+        setCookie('subscriptions', JSON.stringify(subscriptions), 365);
+    }
+    
+    function setCookie(name, value, days) {
+        let expires = '';
+        if (days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = '; expires=' + date.toUTCString();
+        }
+        document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/';
+    }
+    
+    function getCookie(name) {
+        const nameEQ = name + '=';
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+        }
+        return null;
+    }
+    
+    // Helper function for lazy loading images
+    function initLazyLoading() {
+        if ('IntersectionObserver' in window) {
+            const lazyImages = document.querySelectorAll('.lazy-load');
+            
+            const imageObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        const src = img.dataset.src;
+                        
+                        if (src) {
+                            img.src = src;
+                            img.classList.remove('lazy-load');
+                            imageObserver.unobserve(img);
+                        }
+                    }
+                });
+            });
+            
+            lazyImages.forEach((img) => imageObserver.observe(img));
+        } else {
+            // Fallback for browsers that don't support IntersectionObserver
+            const lazyImages = document.querySelectorAll('.lazy-load');
+            
+            lazyImages.forEach((img) => {
+                img.src = img.dataset.src;
+                img.classList.remove('lazy-load');
+            });
+        }
+    }
+</script>
+{% endblock %}

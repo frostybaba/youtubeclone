@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+
+{% block title %}{{ query }} - NeonTube Search{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2><i class="fas fa-search"></i> Search results for "{{ query }}"</h2>
+    
+    {% if videos %}
+    <div id="search-results" class="video-grid animate-fade-in">
+        {% for video in videos %}
+        <div class="video-card" data-video-id="{{ video.id }}">
+            <div class="video-thumbnail">
+                <a href="/watch?v={{ video.id }}">
+                    <img src="{{ video.thumbnail }}" alt="{{ video.title }}" loading="lazy">
+                    {% if video.duration %}
+                    <div class="video-duration">{{ video.duration }}</div>
+                    {% endif %}
+                </a>
+            </div>
+            <div class="video-info">
+                <h3 class="video-title"><a href="/watch?v={{ video.id }}">{{ video.title }}</a></h3>
+                <div class="video-channel"><a href="/channel/{{ video.channel_id }}">{{ video.channel }}</a></div>
+                <div class="video-stats">
+                    <div class="video-views">
+                        <i class="fas fa-eye"></i> {{ video.view_count|default('...') }}
+                    </div>
+                    <div class="video-date">
+                        <i class="fas fa-calendar-alt"></i> {{ video.published_at|default('...') }}
+                    </div>
+                </div>
+                <button class="subscribe-btn" data-channel="{{ video.channel }}" data-channel-id="{{ video.channel_id }}">
+                    <i class="fas fa-plus"></i> Subscribe
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div id="loading-spinner" class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading more results...</p>
+    </div>
+    
+    <div id="load-more-container" class="load-more-container">
+        <button id="load-more-btn" class="load-more-btn">Load More Results</button>
+    </div>
+    
+    <div id="no-more-results" class="no-more-results" style="display: none;">
+        <p>No more results to load</p>
+    </div>
+    
+    {% else %}
+        {% if error %}
+        <div class="error-container">
+            <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+            <h3 class="error-message">Search Failed</h3>
+            <p class="error-details">{{ error }}</p>
+            <button class="btn btn-accent" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt btn-icon"></i> Try Again
+            </button>
+        </div>
+        {% else %}
+        <div class="empty-container">
+            <div class="empty-icon"><i class="fas fa-search"></i></div>
+            <h3 class="empty-message">No Results Found</h3>
+            <p class="empty-details">Try different keywords or check your spelling</p>
+            <a href="/" class="btn btn-primary">
+                <i class="fas fa-home btn-icon"></i> Back to Discover
+            </a>
+        </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        updateSubscribeButtons();
+        setupSubscriptionEvents();
+        setupProgressiveLoading();
+    });
+    
+    // Progressive loading for search results
+    function setupProgressiveLoading() {
+        const searchResults = document.getElementById('search-results');
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const noMoreResults = document.getElementById('no-more-results');
+        const query = '{{ query }}';
+        
+        let currentPage = 1;
+        let isLoading = false;
+        let allResultsLoaded = false;
+        let totalResultsLoaded = {{ videos|length }};
+        
+        // Create video card element
+        function createVideoCard(video) {
+            const videoCard = document.createElement('div');
+            videoCard.className = 'video-card animate-fade-in';
+            videoCard.dataset.videoId = video.id;
+            
+            const durationHtml = video.duration ? 
+                `<div class="video-duration">${video.duration}</div>` : '';
+            
+            videoCard.innerHTML = `
+                <div class="video-thumbnail">
+                    <a href="/watch?v=${video.id}">
+                        <img src="${video.thumbnail}" alt="${video.title}" loading="lazy">
+                        ${durationHtml}
+                    </a>
+                </div>
+                <div class="video-info">
+                    <h3 class="video-title"><a href="/watch?v=${video.id}">${video.title}</a></h3>
+                    <div class="video-channel"><a href="/channel/${video.channel_id}">${video.channel}</a></div>
+                    <div class="video-stats">
+                        <div class="video-views">
+                            <i class="fas fa-eye"></i> ${video.view_count || '...'}
+                        </div>
+                        <div class="video-date">
+                            <i class="fas fa-calendar-alt"></i> ${video.published_at || '...'}
+                        </div>
+                    </div>
+                    <button class="subscribe-btn" data-channel="${video.channel}" data-channel-id="${video.channel_id}">
+                        <i class="fas fa-plus"></i> Subscribe
+                    </button>
+                </div>
+            `;
+            
+            // Add subscription event listener
+            const subscribeBtn = videoCard.querySelector('.subscribe-btn');
+            const channelId = video.channel_id;
+            
+            if (isChannelSubscribed(channelId)) {
+                subscribeBtn.classList.add('subscribed');
+                subscribeBtn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+            }
+            
+            subscribeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const channelName = video.channel;
+                
+                if (subscribeBtn.classList.contains('subscribed')) {
+                    removeSubscription(channelId);
+                    subscribeBtn.classList.remove('subscribed');
+                    subscribeBtn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+                    showNotification(`Removed ${channelName} from your subscriptions`);
+                } else {
+                    addSubscription(channelId, channelName);
+                    subscribeBtn.classList.add('subscribed');
+                    subscribeBtn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+                    showNotification(`Subscribed to ${channelName}`);
+                }
+            });
+            
+            return videoCard;
+        }
+        
+        // Load more search results
+        function loadMoreResults() {
+            if (isLoading || allResultsLoaded) return;
+            
+            isLoading = true;
+            currentPage++;
+            loadingSpinner.style.display = 'flex';
+            loadMoreBtn.style.display = 'none';
+            
+            // Calculate skip parameter based on already loaded results
+            const skip = totalResultsLoaded;
+            const maxResults = 10; // Load 10 videos at a time
+            
+            fetch(`/api/search?q=${encodeURIComponent(query)}&max_results=${maxResults}&skip=${skip}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load more results');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingSpinner.style.display = 'none';
+                    
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    
+                    if (data.videos && data.videos.length > 0) {
+                        data.videos.forEach(video => {
+                            const videoCard = createVideoCard(video);
+                            searchResults.appendChild(videoCard);
+                        });
+                        
+                        // Update total loaded count
+                        totalResultsLoaded += data.videos.length;
+                        
+                        // Show load more button if not all results loaded
+                        if (data.videos.length < maxResults) {
+                            allResultsLoaded = true;
+                            noMoreResults.style.display = 'block';
+                        } else {
+                            loadMoreBtn.style.display = 'block';
+                        }
+                    } else {
+                        allResultsLoaded = true;
+                        noMoreResults.style.display = 'block';
+                    }
+                    
+                    isLoading = false;
+                })
+                .catch(error => {
+                    console.error('Error loading more results:', error);
+                    loadingSpinner.style.display = 'none';
+                    loadMoreBtn.style.display = 'block';
+                    loadMoreBtn.textContent = 'Retry Loading More';
+                    isLoading = false;
+                });
+        }
+        
+        // Add event listener for load more button
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', loadMoreResults);
+            
+            // Also load more videos when scrolling near the bottom
+            window.addEventListener('scroll', function() {
+                if (isLoading || allResultsLoaded) return;
+                
+                const scrollHeight = document.documentElement.scrollHeight;
+                const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+                const clientHeight = document.documentElement.clientHeight;
+                
+                // If we're near the bottom of the page, load more videos
+                if (scrollTop + clientHeight >= scrollHeight - 300) {
+                    loadMoreResults();
+                }
+            });
+        }
+    }
+    
+    function updateSubscribeButtons() {
+        // Update subscribe buttons state
+        document.querySelectorAll('.subscribe-btn').forEach(btn => {
+            const channelId = btn.getAttribute('data-channel-id');
+            if (isChannelSubscribed(channelId)) {
+                btn.classList.add('subscribed');
+                btn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+            }
+        });
+    }
+    
+    function setupSubscriptionEvents() {
+        // Add subscription from video card
+        document.querySelectorAll('.subscribe-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent video card click
+                const channelId = btn.getAttribute('data-channel-id');
+                const channelName = btn.getAttribute('data-channel');
+                
+                if (btn.classList.contains('subscribed')) {
+                    removeSubscription(channelId);
+                    btn.classList.remove('subscribed');
+                    btn.innerHTML = '<i class="fas fa-plus"></i> Subscribe';
+                    
+                    // Show notification
+                    showNotification(`Removed ${channelName} from your subscriptions`);
+                } else {
+                    addSubscription(channelId, channelName);
+                    btn.classList.add('subscribed');
+                    btn.innerHTML = '<i class="fas fa-check"></i> Subscribed';
+                    
+                    // Show notification
+                    showNotification(`Subscribed to ${channelName}`);
+                }
+            });
+        });
+    }
+    
+    function isChannelSubscribed(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        return subscriptions.some(sub => {
+            if (typeof sub === 'object') {
+                return sub.id === channelId;
+            } else {
+                return sub === channelId; // For backward compatibility
+            }
+        });
+    }
+    
+    function addSubscription(channelId, channelName) {
+        const subscriptions = getSubscriptionsFromCookies();
+        
+        // Check if already subscribed 
+        if (!isChannelSubscribed(channelId)) {
+            const newSubscription = {
+                id: channelId,
+                name: channelName,
+                added: new Date().toISOString()
+            };
+            
+            subscriptions.push(newSubscription);
+            setSubscriptionsCookie(subscriptions);
+        }
+    }
+    
+    function removeSubscription(channelId) {
+        const subscriptions = getSubscriptionsFromCookies();
+        const updatedSubscriptions = subscriptions.filter(sub => {
+            if (typeof sub === 'object') {
+                return sub.id !== channelId;
+            } else {
+                return sub !== channelId; // For backward compatibility
+            }
+        });
+        
+        setSubscriptionsCookie(updatedSubscriptions);
+    }
+    
+    function showNotification(message) {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-check-circle"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+        
+        // Remove after delay
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                notification.remove();
+            }, 500);
+        }, 3000);
+    }
+    
+    function getSubscriptionsFromCookies() {
+        const cookieValue = getCookie('subscriptions');
+        return cookieValue ? JSON.parse(cookieValue) : [];
+    }
+    
+    function setSubscriptionsCookie(subscriptions) {
+        setCookie('subscriptions', JSON.stringify(subscriptions), 365);
+    }
+    
+    function setCookie(name, value, days) {
+        let expires = '';
+        if (days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            expires = '; expires=' + date.toUTCString();
+        }
+        document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/';
+    }
+    
+    function getCookie(name) {
+        const nameEQ = name + '=';
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length));
+        }
+        return null;
+    }
+</script>
+
+<style>
+.loading-spinner {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(157, 78, 221, 0.3);
+    border-radius: 50%;
+    border-top-color: #9d4edd;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.load-more-btn {
+    background-color: #9d4edd;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.load-more-btn:hover {
+    background-color: #7b2cbf;
+}
+
+.no-more-results {
+    text-align: center;
+    margin: 20px 0;
+    color: #999;
+}
+</style>
+{% endblock %}
